@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner Absensi Kehadiran Ujian Semester Ganjil - SMP Negeri 56 Merangin</title>
+    <!--  Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- HTML5-QRCode Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- jsQR Fallback Engine untuk WebView Android -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <!-- SheetJS (XLSX) untuk Export Rekap Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+
+        /* Kustomisasi Kotak Kamera QR Reader */
+        #qr-reader {
+            border: none !important;
+            border-radius: 1rem;
+            overflow: hidden;
+            background: #0f172a;
+        }
+        #qr-reader video {
+            border-radius: 1rem !important;
+            object-fit: cover !important;
+        }
+        #qr-reader__dashboard_section_csr button {
+            background-color: #123466 !important;
+            color: white !important;
+            border-radius: 0.75rem !important;
+            padding: 0.5rem 1rem !important;
+            font-weight: 700 !important;
+            font-size: 0.75rem !important;
+            border: none !important;
+            cursor: pointer !important;
+        }
+
+        @keyframes pulseRing {
+            0% { transform: scale(0.95); opacity: 0.9; }
+            70% { transform: scale(1.03); opacity: 0.3; }
+            100% { transform: scale(0.95); opacity: 0.9; }
+        }
+        .scan-success-flash {
+            animation: pulseRing 0.5s ease-out;
+        }
+
+        /* Pengaturan Cetak Berita Acara / Daftar Hadir */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 12mm;
+            }
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            .print-card {
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+            }
+            .print-page-break {
+                break-before: page;
+                page-break-before: always;
+            }
+            table.attendance-table th,
+            table.attendance-table td {
+                border: 1px solid #1e293b !important;
+                padding: 6px 8px !important;
+                font-size: 10pt !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Toast Notification -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm no-print"></div>
+
+    <!-- Modal Konfirmasi -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
+            <h3 id="confirm-title" class="text-lg font-bold text-slate-800 mb-2">Konfirmasi</h3>
+            <p id="confirm-message" class="text-sm text-slate-600 mb-6">Apakah Anda yakin?</p>
+            <div class="flex justify-end gap-3">
+                <button id="confirm-cancel-btn" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">Batal</button>
+                <button id="confirm-ok-btn" class="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 transition">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NAVBAR HEADER -->
+    <header class="bg-[#123466] text-white shadow-md sticky top-0 z-30 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <!-- Logo Perisai SMPN 56 Merangin -->
+                <div class="w-10 h-11 shrink-0 flex items-center justify-center">
+                    <svg viewBox="0 0 120 132" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                        <defs>
+                            <clipPath id="nav-shield-clip">
+                                <path d="M18 12 Q39 24 60 8 Q81 24 102 12 C116 42 110 96 60 124 C10 96 4 42 18 12 Z"/>
+                            </clipPath>
+                        </defs>
+                        <path d="M18 12 Q39 24 60 8 Q81 24 102 12 C116 42 110 96 60 124 C10 96 4 42 18 12 Z" fill="#ffffff" stroke="#ffffff" stroke-width="5"/>
+                        <g clip-path="url(#nav-shield-clip)">
+                            <rect x="0" y="0" width="120" height="58" fill="#0066cc"/>
+                            <rect x="0" y="58" width="120" height="17" fill="#ffffff"/>
+                            <rect x="0" y="75" width="120" height="57" fill="#ffffff"/>
+                            <line x1="0" y1="58" x2="120" y2="58" stroke="#111827" stroke-width="2.5"/>
+                            <line x1="0" y1="75" x2="120" y2="75" stroke="#111827" stroke-width="2.5"/>
+                            <text x="60" y="34" text-anchor="middle" fill="#ffffff" font-family="Georgia, serif" font-weight="bold" font-size="14.5">SMP</text>
+                            <text x="60" y="51" text-anchor="middle" fill="#ffffff" font-family="Georgia, serif" font-weight="bold" font-size="13.5">MERANGIN</text>
+                            <text x="60" y="70.5" text-anchor="middle" fill="#111827" font-family="Georgia, serif" font-weight="bold" font-size="9.5">26 MARET 2012</text>
+                            <text x="60" y="110" text-anchor="middle" fill="#0066cc" font-family="Georgia, serif" font-weight="bold" font-size="36">56</text>
+                        </g>
+                        <path d="M18 12 Q39 24 60 8 Q81 24 102 12 C116 42 110 96 60 124 C10 96 4 42 18 12 Z" stroke="#111827" stroke-width="2.8"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-extrabold tracking-tight leading-tight">Absensi Kehadiran Ujian Semester Ganjil</h1>
+                    <p class="text-xs text-blue-200">SMP Negeri 56 Merangin • Pemindai QR Kartu Peserta Ujian</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+                <div class="bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-xs font-semibold flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span id="live-clock">--:--:-- WIB</span>
+                </div>
+                <button onclick="exportAttendanceExcel()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-xs">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Unduh Rekap Excel (.xlsx)
+                </button>
+                <button onclick="openBeritaAcaraModal()" class="px-3.5 py-2 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition flex items-center gap-1.5 shadow-xs">
+                    <span>📋 Berita Acara Ujian</span>
+                </button>
+                <button onclick="printDaftarHadirOnly()" class="px-4 py-2 rounded-xl text-xs font-extrabold bg-white text-[#123466] hover:bg-blue-50 transition flex items-center gap-1.5 shadow-sm">
+                    <span>🖨️ Cetak Daftar Hadir</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MODAL BERITA ACARA PELAKSANAAN UJIAN SEMESTER -->
+    <div id="berita-acara-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full p-5 sm:p-6 border border-slate-200 max-h-[94vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div>
+                    <h3 class="text-lg font-extrabold text-slate-800">Berita Acara Pelaksanaan Ujian Berbasis Android / Digital</h3>
+                    <p class="text-xs text-slate-500">Sesuaikan detail pelaksanaan ujian tanpa kertas (HP Android / CBT) dan lihat pratinjau surat di sebelah kanan.</p>
+                </div>
+                <button onclick="closeBeritaAcaraModal()" class="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- KOLOM KIRI: FORM ISIAN BERITA ACARA UJIAN ANDROID -->
+                <div class="lg:col-span-5 space-y-3 text-xs">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">Tahun Ajaran</label>
+                            <input type="text" id="ba-tahun-ajaran" value="2026/2027" oninput="saveBeritaAcaraMeta()" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-semibold">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">Semester</label>
+                            <select id="ba-semester" onchange="saveBeritaAcaraMeta()" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-900 outline-none font-semibold">
+                                <option value="Ganjil" selected>Ganjil</option>
+                                <option value="Genap">Genap</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Ruang Ujian *</label>
+                        <input type="text" id="ba-ruang-ujian" list="ba-ruang-suggestions" oninput="handleBeritaAcaraRuangInput()" placeholder="Contoh: Ruang 01" class="w-full px-3 py-2 border border-blue-300 bg-blue-50/40 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-bold text-slate-800">
+                        <datalist id="ba-ruang-suggestions">
+                            <option value="Ruang 01"></option>
+                            <option value="Ruang 02"></option>
+                            <option value="Ruang 03"></option>
+                            <option value="Ruang 04"></option>
+                        </datalist>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">Moda Ujian</label>
+                            <select id="ba-moda-ujian" onchange="saveBeritaAcaraMeta()" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-900 outline-none font-medium">
+                                <option value="Berbasis HP Android (Daring / CBT)" selected>HP Android (Daring / CBT)</option>
+                                <option value="Berbasis Komputer / Chromebook (CBT)">Komputer / Chromebook</option>
+                                <option value="Semi Daring / Intranet Sekolah">Semi Daring / Intranet</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">Aplikasi Ujian</label>
+                            <input type="text" id="ba-aplikasi-ujian" value="ExamBrowser / Google Form / CBT Sekolah" oninput="saveBeritaAcaraMeta()" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-medium">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">Seharusnya</label>
+                            <input type="number" min="0" id="ba-total-seharusnya" value="0" oninput="recalcBeritaAcaraCounts()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-bold text-slate-800">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-emerald-700 mb-1">Hadir (QR)</label>
+                            <input type="number" min="0" id="ba-total-hadir" value="0" oninput="recalcBeritaAcaraCounts()" class="w-full px-2.5 py-1.5 border border-emerald-300 rounded-lg bg-emerald-50 font-bold text-emerald-800">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-rose-700 mb-1">Tidak Hadir</label>
+                            <input type="number" min="0" id="ba-total-tidak-hadir" value="0" readonly class="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-100 font-bold text-rose-700">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Status Jaringan & Server</label>
+                        <select id="ba-status-jaringan" onchange="saveBeritaAcaraMeta()" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-900 outline-none font-medium">
+                            <option value="Lancar dan stabil selama ujian berlangsung" selected>Lancar dan stabil</option>
+                            <option value="Sempat terkendala sinyal namun dapat diatasi">Sempat terkendala namun teratasi</option>
+                            <option value="Menggunakan paket data cadangan sekolah">Menggunakan hotspot cadangan</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Nomor Peserta Tidak Hadir (Otomatis dari Master / Bisa Diedit)</label>
+                        <input type="text" id="ba-no-tidak-hadir" oninput="saveBeritaAcaraMeta()" placeholder="Contoh: US-26-004 (Sakit) atau Nihil" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">Pengawas Ruang 1</label>
+                            <input type="text" id="ba-pengawas-1" oninput="saveBeritaAcaraMeta()" placeholder="Nama Pengawas 1" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-semibold">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">NIP Pengawas Ruang 1</label>
+                            <input type="text" id="ba-nip-1" oninput="saveBeritaAcaraMeta()" placeholder="NIP (Opsional)" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">Pengawas Ruang 2 (Opsional)</label>
+                            <input type="text" id="ba-pengawas-2" oninput="saveBeritaAcaraMeta()" placeholder="Kosongkan jika 1 pengawas" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-600 mb-1">NIP Pengawas Ruang 2</label>
+                            <input type="text" id="ba-nip-2" oninput="saveBeritaAcaraMeta()" placeholder="NIP (Opsional)" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Catatan Kejadian Khusus Selama Ujian</label>
+                        <textarea id="ba-catatan" rows="2" oninput="saveBeritaAcaraMeta()" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">Seluruh peserta berhasil login ke aplikasi ujian menggunakan HP Android masing-masing, mengirim jawaban (submit) tepat waktu, dan pelaksanaan ujian berjalan tertib serta aman.</textarea>
+                    </div>
+                </div>
+
+                <!-- KOLOM KANAN: LIVE PRATINJAU SURAT BERITA ACARA -->
+                <div class="lg:col-span-7 flex flex-col">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-extrabold text-[#123466] uppercase tracking-wide">📄 Pratinjau Dokumen Berita Acara (Siap Cetak A4)</span>
+                        <span class="text-[11px] text-slate-500">Otomatis diperbarui saat Anda mengetik</span>
+                    </div>
+                    <div id="ba-live-preview-box" class="bg-white border border-slate-300 rounded-xl p-5 sm:p-6 shadow-inner overflow-y-auto max-h-[60vh] text-slate-950">
+                        <!-- Hasil pratinjau surat dirender langsung di sini -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap justify-end gap-2.5 pt-4 mt-4 border-t border-slate-100">
+                <button type="button" onclick="closeBeritaAcaraModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">Tutup</button>
+                <button type="button" onclick="printBeritaAcaraOnly()" class="px-4 py-2 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition shadow-xs">
+                    🖨️ Cetak Berita Acara Saja
+                </button>
+                <button type="button" onclick="printBeritaAcaraDanDaftarHadir()" class="px-4 py-2 rounded-xl text-xs font-extrabold bg-[#123466] hover:bg-blue-950 text-white transition shadow-xs">
+                    🖨️ Cetak Berita Acara + Daftar Hadir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DOKUMEN PRINT BERITA ACARA PELAKSANAAN UJIAN SEMESTER -->
+    <div id="print-berita-acara-section" class="hidden mb-6 text-slate-950 leading-relaxed">
+        <!-- Kop Surat Resmi -->
+        <div class="border-b-4 border-double border-slate-950 pb-3 mb-4 flex items-center justify-between gap-4">
+            <div class="w-16 h-16 shrink-0">
+                <svg viewBox="0 0 120 132" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                    <defs>
+                        <clipPath id="ba-shield-clip">
+                            <path d="M18 12 Q39 24 60 8 Q81 24 102 12 C116 42 110 96 60 124 C10 96 4 42 18 12 Z"/>
+                        </clipPath>
+                    </defs>
+                    <g clip-path="url(#ba-shield-clip)">
+                        <rect x="0" y="0" width="120" height="58" fill="#0066cc"/>
+                        <rect x="0" y="58" width="120" height="17" fill="#ffffff"/>
+                        <rect x="0" y="75" width="120" height="57" fill="#ffffff"/>
+                        <line x1="0" y1="58" x2="120" y2="58" stroke="#111827" stroke-width="2.5"/>
+                        <line x1="0" y1="75" x2="120" y2="75" stroke="#111827" stroke-width="2.5"/>
+                        <text x="60" y="34" text-anchor="middle" fill="#ffffff" font-family="Georgia, serif" font-weight="bold" font-size="14.5">SMP</text>
+                        <text x="60" y="51" text-anchor="middle" fill="#ffffff" font-family="Georgia, serif" font-weight="bold" font-size="13.5">MERANGIN</text>
+                        <text x="60" y="70.5" text-anchor="middle" fill="#111827" font-family="Georgia, serif" font-weight="bold" font-size="9.5">26 MARET 2012</text>
+                        <text x="60" y="110" text-anchor="middle" fill="#0066cc" font-family="Georgia, serif" font-weight="bold" font-size="36">56</text>
+                    </g>
+                    <path d="M18 12 Q39 24 60 8 Q81 24 102 12 C116 42 110 96 60 124 C10 96 4 42 18 12 Z" stroke="#111827" stroke-width="2.8"/>
+                </svg>
+            </div>
+            <div class="text-center flex-1">
+                <div class="text-xs font-bold uppercase tracking-wider">PEMERINTAH KABUPATEN MERANGIN</div>
+                <div class="text-xs font-bold uppercase tracking-wider">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+                <div class="text-lg font-black uppercase tracking-tight">SMP NEGERI 56 MERANGIN</div>
+                <div class="text-[11px] font-medium">Kabupaten Merangin, Provinsi Jambi</div>
+            </div>
+            <div class="w-16"></div>
+        </div>
+
+        <div class="text-center mb-4">
+            <div class="text-sm font-black uppercase underline tracking-wide">BERITA ACARA PELAKSANAAN UJIAN SEMESTER <span id="ba-doc-semester">GANJIL</span></div>
+            <div class="text-xs font-bold uppercase">TAHUN AJARAN <span id="ba-doc-tahun">2026/2027</span></div>
+        </div>
+
+        <p class="text-xs text-justify mb-3">
+            Pada hari ini <strong id="ba-doc-hari">-</strong> tanggal <strong id="ba-doc-tgl-lengkap">-</strong>, telah diselenggarakan Ujian Semester <span id="ba-doc-semester-inline">Ganjil</span> Tahun Ajaran <span id="ba-doc-tahun-inline">2026/2027</span> <strong id="ba-doc-moda-inline">Berbasis HP Android (Daring / CBT)</strong> di <strong>SMP Negeri 56 Merangin</strong> dengan rincian pelaksanaan sebagai berikut:
+        </p>
+
+        <table class="w-full text-xs mb-3">
+            <tbody>
+                <tr><td class="w-56 py-0.5 font-semibold">1. Mata Pelajaran</td><td class="w-4">:</td><td class="font-bold" id="ba-doc-mapel">-</td></tr>
+                <tr><td class="py-0.5 font-semibold">2. Waktu Pelaksanaan</td><td>:</td><td class="font-bold" id="ba-doc-sesi">-</td></tr>
+                <tr><td class="py-0.5 font-semibold">3. Ruang Ujian</td><td>:</td><td class="font-bold" id="ba-doc-ruang">-</td></tr>
+                <tr><td class="py-0.5 font-semibold">4. Media & Aplikasi Ujian</td><td>:</td><td class="font-semibold" id="ba-doc-aplikasi">-</td></tr>
+                <tr><td class="py-0.5 font-semibold">5. Status Jaringan / Server</td><td>:</td><td class="font-semibold" id="ba-doc-jaringan">-</td></tr>
+                <tr><td class="py-0.5 font-semibold">6. Jumlah Peserta Seharusnya</td><td>:</td><td><strong id="ba-doc-seharusnya">0</strong> orang</td></tr>
+                <tr><td class="py-0.5 font-semibold">7. Jumlah Peserta Hadir (Scan QR)</td><td>:</td><td><strong id="ba-doc-hadir">0</strong> orang</td></tr>
+                <tr><td class="py-0.5 font-semibold">8. Jumlah Peserta Tidak Hadir</td><td>:</td><td><strong id="ba-doc-tidak-hadir">0</strong> orang</td></tr>
+                <tr><td class="py-0.5 font-semibold align-top">9. Nomor Peserta Tidak Hadir</td><td class="align-top">:</td><td class="font-semibold" id="ba-doc-no-absen">Nihil</td></tr>
+            </tbody>
+        </table>
+
+        <div class="text-xs mb-3">
+            <div class="font-semibold mb-1">10. Catatan Selama Pelaksanaan Ujian:</div>
+            <div class="border border-slate-800 rounded p-2.5 min-h-[52px] font-medium" id="ba-doc-catatan">
+                Seluruh peserta berhasil login ke aplikasi ujian menggunakan HP Android masing-masing, mengirim jawaban (submit) tepat waktu, dan pelaksanaan ujian berjalan tertib serta aman.
+            </div>
+        </div>
+
+        <p class="text-xs mb-5">
+            Demikian Berita Acara Pelaksanaan Ujian Semester ini dibuat dengan sesungguhnya untuk dapat dipergunakan sebagaimana mestinya.
+        </p>
+
+        <div class="grid grid-cols-2 gap-8 text-xs text-center mt-3">
+            <div id="ba-doc-sign-box-2" class="invisible">
+                <div>&nbsp;</div>
+                <div>Pengawas Ruang II,</div>
+                <div class="h-14"></div>
+                <div class="font-bold underline" id="ba-doc-sign-nama-2">-</div>
+                <div id="ba-doc-sign-nip-2" class="text-[11px]"></div>
+            </div>
+            <div>
+                <div>Merangin, <span id="ba-doc-sign-tgl">-</span></div>
+                <div>Pengawas Ruang I,</div>
+                <div class="h-14"></div>
+                <div class="font-bold underline" id="ba-doc-sign-nama-1">Panitia Ujian</div>
+                <div id="ba-doc-sign-nip-1" class="text-[11px]"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KOP SURAT KHUSUS PRINT DAFTAR HADIR -->
+    <div id="print-daftar-hadir-header" class="hidden print-only mb-5 border-b-2 border-slate-900 pb-3">
+        <div class="flex items-center justify-between gap-4">
+            <div class="w-16 h-16 shrink-0">
+                <svg viewBox="0 0 120 132" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                    <defs>
+                        <clipPath id="print-shield-clip">
+                            <path d="M18 12 Q39 24 60 8 Q81 24 102 12 C116 42 110 96 60 124 C10 96 4 42 18 12 Z"/>
+                        </clipPath>
+                    </defs>
+                    <g clip-path="url(#print-shield-clip)">
+                        <rect x="0" y="0" width="120" height="58" fill="#0066cc"/>
+                        <rect x="0" y="58" width="120" height="17" fill="#ffffff"/>
+                        <rect x="0" y="75" width="120" height="57" fill="#ffffff"/>
+                        <line x1="0" y1="58" x2="120" y2="58" stroke="#111827" stroke-width="2.5"/>
+                        <line x1="0" y1="75" x2="120" y2="75" stroke="#111827" stroke-width="2.5"/>
+                        <text x="60" y="34" text-anchor="middle" fill="#ffffff" font-family="Georgia, serif" font-weight="bold" font-size="14.5">SMP</text>
+                        <text x="60" y="51" text-anchor="middle" fill="#ffffff" font-family="Georgia, serif" font-weight="bold" font-size="13.5">MERANGIN</text>
+                        <text x="60" y="70.5" text-anchor="middle" fill="#111827" font-family="Georgia, serif" font-weight="bold" font-size="9.5">26 MARET 2012</text>
+                        <text x="60" y="110" text-anchor="middle" fill="#0066cc" font-family="Georgia, serif" font-weight="bold" font-size="36">56</text>
+                    </g>
+                    <path d="M18 12 Q39 24 60 8 Q81 24 102 12 C116 42 110 96 60 124 C10 96 4 42 18 12 Z" stroke="#111827" stroke-width="2.8"/>
+                </svg>
+            </div>
+            <div class="text-center flex-1">
+                <div class="text-xs font-bold uppercase tracking-wider">PEMERINTAH KABUPATEN MERANGIN • DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+                <div class="text-lg font-black uppercase tracking-tight">SMP NEGERI 56 MERANGIN</div>
+                <div class="text-xs font-bold uppercase mt-0.5">DAFTAR HADIR PESERTA UJIAN SEMESTER GANJIL TAHUN AJARAN 2026/2027</div>
+            </div>
+            <div class="w-16"></div>
+        </div>
+        <div class="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold">
+            <div>Mata Pelajaran: <span id="print-meta-mapel" class="font-bold">-</span></div>
+            <div>Hari / Tanggal: <span id="print-meta-tanggal" class="font-bold">-</span></div>
+            <div>Ruang / Pengawas: <span id="print-meta-ruang" class="font-bold">-</span></div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- KOLOM KIRI: KAMERA SCANNER QR & PENGATURAN SESI UJIAN -->
+        <section class="lg:col-span-5 space-y-5 no-print">
+
+            <!-- Panel Kamera Pemindai QR Code -->
+            <div class="bg-white rounded-2xl shadow-xs border-2 border-[#123466]/20 p-5">
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <h2 class="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Pemindai QR Code Kartu Ujian
+                    </h2>
+                    <div class="flex items-center gap-1.5">
+                        <button id="btn-start-cam" onclick="startCameraScanner()" class="px-3.5 py-2 rounded-xl text-xs font-extrabold bg-[#123466] hover:bg-blue-950 text-white transition shadow-xs flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <span>Aktifkan Kamera</span>
+                        </button>
+                        <button id="btn-stop-cam" onclick="stopCameraScanner()" class="hidden px-3.5 py-2 rounded-xl text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white transition shadow-xs">
+                            Matikan Kamera
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pilihan Lensa Kamera (Muncul saat lebih dari 1 kamera terdeteksi) -->
+                <div id="camera-select-wrapper" class="hidden mb-3">
+                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Pilih Kamera Perangkat:</label>
+                    <select id="camera-device-select" onchange="switchCameraDevice()" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-slate-50 font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-900"></select>
+                </div>
+
+                <!-- Area Viewport Kamera (Native Android WebView Stream + Html5Qrcode) -->
+                <div class="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 min-h-[250px] flex items-center justify-center">
+                    <div id="qr-reader" class="w-full hidden"></div>
+                    <video id="native-qr-video" autoplay playsinline muted class="hidden w-full h-[260px] object-cover"></video>
+                    <canvas id="native-qr-canvas" class="hidden"></canvas>
+
+                    <!-- Bingkai Target Scan QR -->
+                    <div id="scan-guide-overlay" class="hidden absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div class="w-48 h-48 border-2 border-emerald-400 rounded-2xl shadow-[0_0_0_9999px_rgba(15,23,42,0.45)] relative">
+                            <span class="absolute -top-6 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                Arahkan QR Kartu ke Kotak
+                            </span>
+                        </div>
+                    </div>
+
+                    <div id="camera-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 text-slate-300">
+                        <div class="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center mb-3 text-blue-300">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+                        </div>
+                        <p class="text-xs font-bold text-white">Kamera Pemindai Belum Aktif</p>
+                        <p class="text-[11px] text-slate-400 mt-1 max-w-xs">Klik <strong class="text-white">Aktifkan Kamera</strong> di atas. Jika di aplikasi Android (APK), pastikan izin kamera aplikasi sudah diaktifkan.</p>
+                    </div>
+                </div>
+
+                <!-- Tombol Alternatif Kamera Bawaan Android (Capture Foto QR) -->
+                <div class="mt-2.5 flex items-center justify-between gap-2 bg-blue-50/80 border border-blue-200 rounded-xl p-2.5">
+                    <div class="text-[11px] text-slate-700 leading-tight">
+                        <strong class="text-[#123466]">Alternatif HP Android:</strong> Jika live kamera diblokir WebView APK, gunakan kamera foto langsung:
+                    </div>
+                    <label class="cursor-pointer shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-extrabold bg-[#123466] hover:bg-blue-950 text-white transition shadow-2xs">
+                        📸 Foto QR Kartu
+                        <input type="file" id="android-camera-capture" accept="image/*" capture="environment" class="hidden" onchange="handleAndroidPhotoQr(event)">
+                    </label>
+                </div>
+
+                <!-- Input Scanner USB / Ketik Manual Nomor Peserta atau NISN -->
+                <form onsubmit="handleManualScanSubmit(event)" class="mt-3 flex gap-2">
+                    <input type="text" id="manual-qr-input" placeholder="Scan Barcode USB atau ketik No. Peserta / NISN..." class="flex-1 px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-semibold">
+                    <button type="submit" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition shrink-0">
+                        Catat Hadir
+                    </button>
+                </form>
+            </div>
+
+            <!-- Kartu Status Hasil Scan Terakhir -->
+            <div id="last-scan-card" class="bg-white rounded-2xl shadow-xs border border-slate-200 p-4">
+                <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Status Pemindaian Terakhir</div>
+                <div id="last-scan-content" class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <div class="text-xs text-slate-500">
+                        Menunggu pemindaian QR Code pada kartu peserta ujian...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Pengaturan Sesi Ujian -->
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200 p-5">
+                <h2 class="text-sm font-extrabold text-slate-800 mb-3 flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-[#123466]"></span>
+                    Informasi Sesi & Mata Pelajaran Ujian
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div class="sm:col-span-2">
+                        <label class="block font-semibold text-slate-600 mb-1">Mata Pelajaran Ujian *</label>
+                        <select id="sesi-mapel" onchange="handleMapelSelectChange()" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-900 outline-none font-bold text-slate-800">
+                            <option value="Pendidikan Agama dan Budi Pekerti">1. Pendidikan Agama dan Budi Pekerti</option>
+                            <option value="Pendidikan Pancasila">2. Pendidikan Pancasila</option>
+                            <option value="Bahasa Indonesia" selected>3. Bahasa Indonesia</option>
+                            <option value="Matematika">4. Matematika</option>
+                            <option value="Ilmu Pengetahuan Alam (IPA)">5. Ilmu Pengetahuan Alam (IPA)</option>
+                            <option value="Ilmu Pengetahuan Sosial (IPS)">6. Ilmu Pengetahuan Sosial (IPS)</option>
+                            <option value="Bahasa Inggris">7. Bahasa Inggris</option>
+                            <option value="Pendidikan Jasmani, Olahraga, dan Kesehatan (PJOK)">8. Pendidikan Jasmani, Olahraga, dan Kesehatan (PJOK)</option>
+                            <option value="Informatika">9. Informatika</option>
+                            <option value="Prakarya">10. Prakarya</option>
+                            <option value="Koding dan Kecerdasan Artifisial">11. Koding dan Kecerdasan Artifisial</option>
+                            <option value="Bahasa Arab">12. Bahasa Arab</option>
+                            <option value="__CUSTOM__">+ Mata Pelajaran Lainnya...</option>
+                        </select>
+                        <input type="text" id="sesi-mapel-custom" oninput="saveSessionMeta()" placeholder="Ketik nama mata pelajaran lainnya..." class="hidden mt-2 w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-bold text-slate-800">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Tanggal Ujian</label>
+                        <input type="date" id="sesi-tanggal" onchange="saveSessionMeta()" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-medium">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Waktu Pelaksanaan</label>
+                        <input type="text" id="sesi-jam" value="07.30 - 09.30 WIB" oninput="saveSessionMeta()" placeholder="Contoh: 07.30 - 09.30 WIB" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none font-medium">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Ruang Tugas</label>
+                        <input type="text" id="sesi-ruang" value="Semua Ruang" oninput="saveSessionMeta()" placeholder="Contoh: Ruang 01" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-600 mb-1">Nama Pengawas Ruang</label>
+                        <input type="text" id="sesi-pengawas" value="Panitia Ujian" oninput="saveSessionMeta()" placeholder="Nama Guru Pengawas" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block font-semibold text-slate-600 mb-1">NIP Pengawas Ruang (Opsional)</label>
+                        <input type="text" id="sesi-nip" value="" oninput="saveSessionMeta()" placeholder="Contoh: 19850412 201001 1 012 (Kosongkan jika tidak ada)" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+                    <button type="button" onclick="openBeritaAcaraModal()" class="flex-1 py-2.5 px-3 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition shadow-2xs flex items-center justify-center gap-1.5">
+                        <span>📋 Isi & Cetak Berita Acara Ujian</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Opsional: Impor Master Daftar Siswa untuk Validasi Total Belum Hadir -->
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200 p-4">
+                <div class="flex items-center justify-between gap-2">
+                    <div>
+                        <div class="text-xs font-bold text-slate-800">Database Master Peserta (Opsional)</div>
+                        <div class="text-[11px] text-slate-500">Terdaftar: <strong id="master-count" class="text-[#123466]">0</strong> siswa</div>
+                    </div>
+                    <label class="cursor-pointer px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 transition">
+                        📂 Muat Excel Siswa
+                        <input type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="importMasterStudents(event)">
+                    </label>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-1.5">
+                    * Aplikasi otomatis terhubung dengan data siswa yang sudah Anda buat di Generator Kartu Ujian, atau Anda dapat memuat ulang file Excel siswa di sini.
+                </p>
+            </div>
+
+        </section>
+
+        <!-- KOLOM KANAN: REKAPITULASI & TABEL KEHADIRAN REAL-TIME -->
+        <section id="attendance-list-section" class="lg:col-span-7 flex flex-col">
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200 p-5 sm:p-6 flex-1 print-card">
+
+                <!-- Kartu Statistik Kehadiran -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 no-print">
+                    <div class="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200">
+                        <div class="text-[11px] font-bold text-emerald-700 uppercase">Total Hadir</div>
+                        <div id="stat-hadir" class="text-2xl font-black text-emerald-800 mt-0.5">0</div>
+                    </div>
+                    <div class="p-3.5 rounded-2xl bg-blue-50 border border-blue-200">
+                        <div class="text-[11px] font-bold text-blue-700 uppercase">Total Terdaftar</div>
+                        <div id="stat-total" class="text-2xl font-black text-blue-900 mt-0.5">0</div>
+                    </div>
+                    <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200">
+                        <div class="text-[11px] font-bold text-amber-700 uppercase">Belum Scan</div>
+                        <div id="stat-belum" class="text-2xl font-black text-amber-800 mt-0.5">0</div>
+                    </div>
+                    <div class="p-3.5 rounded-2xl bg-slate-100 border border-slate-200">
+                        <div class="text-[11px] font-bold text-slate-600 uppercase">Persentase</div>
+                        <div id="stat-persen" class="text-2xl font-black text-slate-800 mt-0.5">0%</div>
+                    </div>
+                </div>
+
+                <!-- Header Tabel & Filter -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-100 no-print">
+                    <div>
+                        <h2 class="text-base font-extrabold text-slate-800">Daftar Kehadiran Peserta Ujian</h2>
+                        <p class="text-xs text-slate-500">Data tercatat otomatis secara real-time saat QR Code dipindai.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="confirmResetAttendance()" class="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 transition">
+                            Reset Sesi Ini
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bar Filter Pencarian, Kelas & Ruang -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4 no-print">
+                    <input type="text" id="filter-search" oninput="renderAttendanceTable()" placeholder="Cari nama, no peserta, NISN..." class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none">
+                    <select id="filter-kelas" onchange="renderAttendanceTable()" class="px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-900 outline-none">
+                        <option value="ALL">Semua Kelas</option>
+                    </select>
+                    <select id="filter-ruang" onchange="renderAttendanceTable()" class="px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-900 outline-none">
+                        <option value="ALL">Semua Ruang</option>
+                    </select>
+                </div>
+
+                <!-- Tabel Daftar Hadir -->
+                <div class="overflow-x-auto rounded-xl border border-slate-200">
+                    <table class="w-full text-left text-xs border-collapse attendance-table">
+                        <thead class="bg-[#123466] text-white">
+                            <tr>
+                                <th class="p-3 font-bold w-10 text-center">No</th>
+                                <th class="p-3 font-bold">No. Peserta</th>
+                                <th class="p-3 font-bold">NISN</th>
+                                <th class="p-3 font-bold">Nama Peserta</th>
+                                <th class="p-3 font-bold">Kelas</th>
+                                <th class="p-3 font-bold">Ruang</th>
+                                <th class="p-3 font-bold">Waktu Scan</th>
+                                <th class="p-3 font-bold text-center">Status</th>
+                                <th class="p-3 font-bold text-center no-print">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-tbody" class="divide-y divide-slate-200 bg-white">
+                            <!-- Baris data dirender via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Kolom Tanda Tangan Pengawas (Khusus Mode Print) -->
+                <div class="hidden print-only mt-8">
+                    <div class="flex justify-between items-start text-xs">
+                        <div>
+                            <div>Jumlah Peserta Hadir : <strong id="print-count-hadir">0</strong> orang</div>
+                            <div>Jumlah Tidak Hadir : <strong id="print-count-tidak">0</strong> orang</div>
+                        </div>
+                        <div class="text-center w-64">
+                            <div>Merangin, <span id="print-sign-date">November 2026</span></div>
+                            <div>Pengawas Ruang Ujian,</div>
+                            <div class="h-14"></div>
+                            <div class="font-bold underline" id="print-sign-pengawas">Panitia Ujian</div>
+                            <div id="print-sign-nip" class="text-[11px] mt-0.5"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        /* =========================================================
+           PENYIMPANAN & STATE APLIKASI ABSENSI UJIAN QR
+           ========================================================= */
+        const MASTER_STUDENTS_KEY = 'smpn56_exam_students_v1'; // Sinkron dengan Generator Kartu Ujian
+        const ATTENDANCE_LOGS_KEY = 'smpn56_exam_attendance_logs_v1';
+        const SESSION_META_KEY = 'smpn56_exam_session_meta_v1';
+        const BERITA_ACARA_KEY = 'smpn56_exam_berita_acara_v1';
+
+        let masterStudents = [];
+        let attendanceLogs = [];
+        let sessionMeta = {
+            mapel: 'Bahasa Indonesia',
+            tanggal: new Date().toISOString().split('T')[0],
+            jam: '07.30 - 09.30 WIB',
+            ruang: 'Semua Ruang',
+            pengawas: 'Panitia Ujian',
+            nip: ''
+        };
+        let beritaAcaraMeta = {
+            tahunAjaran: '2026/2027',
+            semester: 'Ganjil',
+            modaUjian: 'Berbasis HP Android (Daring / CBT)',
+            aplikasiUjian: 'ExamBrowser / Google Form / CBT Sekolah',
+            statusJaringan: 'Lancar dan stabil selama ujian berlangsung',
+            pengawas2: '',
+            nip2: '',
+            catatan: 'Seluruh peserta berhasil login ke aplikasi ujian menggunakan HP Android masing-masing, mengirim jawaban (submit) tepat waktu, dan pelaksanaan ujian berjalan tertib serta aman.',
+            customNoTidakHadir: ''
+        };
+
+        let html5QrCode = null;
+        let nativeMediaStream = null;
+        let nativeScanLoopId = null;
+        let isScanning = false;
+        let availableCameras = [];
+        let lastScannedRaw = '';
+        let lastScannedTimestamp = 0;
+
+        /* =========================================================
+           INISIALISASI HALAMAN & JAM REAL-TIME
+           ========================================================= */
+        window.addEventListener('DOMContentLoaded', () => {
+            loadAllData();
+            applySessionMetaToUI();
+            startLiveClock();
+            updateFilterOptions();
+            renderAttendanceTable();
+            updateStats();
+        });
+
+        function startLiveClock() {
+            const updateClock = () => {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const el = document.getElementById('live-clock');
+                if (el) el.textContent = `${timeStr} WIB`;
+            };
+            updateClock();
+            setInterval(updateClock, 1000);
+        }
+
+        function loadAllData() {
+            try {
+                const rawMaster = localStorage.getItem(MASTER_STUDENTS_KEY);
+                if (rawMaster) {
+                    const parsed = JSON.parse(rawMaster);
+                    if (Array.isArray(parsed)) masterStudents = parsed;
+                }
+            } catch (e) {
+                masterStudents = [];
+            }
+
+            try {
+                const rawLogs = localStorage.getItem(ATTENDANCE_LOGS_KEY);
+                if (rawLogs) {
+                    const parsed = JSON.parse(rawLogs);
+                    if (Array.isArray(parsed)) attendanceLogs = parsed;
+                }
+            } catch (e) {
+                attendanceLogs = [];
+            }
+
+            try {
+                const rawMeta = localStorage.getItem(SESSION_META_KEY);
+                if (rawMeta) {
+                    sessionMeta = { ...sessionMeta, ...JSON.parse(rawMeta) };
+                }
+            } catch (e) {}
+
+            // Bersihkan format lama seperti "Sesi 1 (07.30 - 09.30)" menjadi "07.30 - 09.30 WIB"
+            if (sessionMeta.jam) {
+                sessionMeta.jam = cleanWaktuPelaksanaan(sessionMeta.jam);
+            }
+
+            try {
+                const rawBa = localStorage.getItem(BERITA_ACARA_KEY);
+                if (rawBa) {
+                    beritaAcaraMeta = { ...beritaAcaraMeta, ...JSON.parse(rawBa) };
+                }
+            } catch (e) {}
+
+            document.getElementById('master-count').textContent = masterStudents.length;
+        }
+
+        function saveAttendanceLogs() {
+            try {
+                localStorage.setItem(ATTENDANCE_LOGS_KEY, JSON.stringify(attendanceLogs));
+            } catch (e) {
+                console.warn('Gagal menyimpan log kehadiran:', e);
+            }
+        }
+
+        function applySessionMetaToUI() {
+            const mapelSelect = document.getElementById('sesi-mapel');
+            const customInput = document.getElementById('sesi-mapel-custom');
+            const savedMapel = sessionMeta.mapel || 'Bahasa Indonesia';
+            const optionExists = Array.from(mapelSelect.options).some(opt => opt.value === savedMapel && opt.value !== '__CUSTOM__');
+
+            if (optionExists) {
+                mapelSelect.value = savedMapel;
+                customInput.classList.add('hidden');
+            } else {
+                mapelSelect.value = '__CUSTOM__';
+                customInput.value = savedMapel;
+                customInput.classList.remove('hidden');
+            }
+
+            document.getElementById('sesi-tanggal').value = sessionMeta.tanggal || new Date().toISOString().split('T')[0];
+            document.getElementById('sesi-jam').value = sessionMeta.jam || '07.30 - 09.30 WIB';
+            document.getElementById('sesi-ruang').value = sessionMeta.ruang || 'Semua Ruang';
+            document.getElementById('sesi-pengawas').value = sessionMeta.pengawas || 'Panitia Ujian';
+            document.getElementById('sesi-nip').value = sessionMeta.nip || '';
+            syncPrintHeaderMeta();
+        }
+
+        function handleMapelSelectChange() {
+            const mapelSelect = document.getElementById('sesi-mapel');
+            const customInput = document.getElementById('sesi-mapel-custom');
+            if (mapelSelect.value === '__CUSTOM__') {
+                customInput.classList.remove('hidden');
+                customInput.focus();
+            } else {
+                customInput.classList.add('hidden');
+            }
+            saveSessionMeta();
+        }
+
+        function saveSessionMeta() {
+            const mapelSelect = document.getElementById('sesi-mapel');
+            const customInput = document.getElementById('sesi-mapel-custom');
+            if (mapelSelect.value === '__CUSTOM__') {
+                sessionMeta.mapel = customInput.value.trim() || 'Mata Pelajaran Lainnya';
+            } else {
+                sessionMeta.mapel = mapelSelect.value || 'Bahasa Indonesia';
+            }
+            sessionMeta.tanggal = document.getElementById('sesi-tanggal').value;
+            sessionMeta.jam = cleanWaktuPelaksanaan(document.getElementById('sesi-jam').value.trim()) || '07.30 - 09.30 WIB';
+            sessionMeta.ruang = document.getElementById('sesi-ruang').value.trim() || 'Semua Ruang';
+            sessionMeta.pengawas = document.getElementById('sesi-pengawas').value.trim() || 'Panitia Ujian';
+            sessionMeta.nip = document.getElementById('sesi-nip').value.trim();
+            try {
+                localStorage.setItem(SESSION_META_KEY, JSON.stringify(sessionMeta));
+            } catch (e) {}
+            syncPrintHeaderMeta();
+        }
+
+        function cleanWaktuPelaksanaan(rawText) {
+            if (!rawText) return '07.30 - 09.30 WIB';
+            let cleaned = String(rawText)
+                .replace(/sesi\s*\d*\s*/gi, '')
+                .replace(/[()]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            return cleaned || '07.30 - 09.30 WIB';
+        }
+
+        function syncPrintHeaderMeta() {
+            const cleanJam = cleanWaktuPelaksanaan(sessionMeta.jam);
+            document.getElementById('print-meta-mapel').textContent = `${sessionMeta.mapel} - ${cleanJam}`;
+            document.getElementById('print-meta-tanggal').textContent = sessionMeta.tanggal || '-';
+            document.getElementById('print-meta-ruang').textContent = `${sessionMeta.ruang} / ${sessionMeta.pengawas}`;
+            document.getElementById('print-sign-date').textContent = sessionMeta.tanggal || 'November 2026';
+            document.getElementById('print-sign-pengawas').textContent = sessionMeta.pengawas || 'Panitia Ujian';
+            const nipEl = document.getElementById('print-sign-nip');
+            if (nipEl) {
+                nipEl.textContent = sessionMeta.nip ? `NIP. ${sessionMeta.nip}` : '';
+            }
+            syncBeritaAcaraDocument();
+        }
+
+        /* =========================================================
+           BERITA ACARA PELAKSANAAN UJIAN SEMESTER
+           ========================================================= */
+        function populateBeritaAcaraRuangSuggestions() {
+            const datalist = document.getElementById('ba-ruang-suggestions');
+            if (!datalist) return;
+            const ruanganUnik = [...new Set([
+                'Ruang 01', 'Ruang 02', 'Ruang 03', 'Ruang 04',
+                ...masterStudents.map(s => s.ruang),
+                ...attendanceLogs.map(a => a.ruang)
+            ].filter(r => r && r.toLowerCase() !== 'semua ruang'))].sort();
+
+            datalist.innerHTML = ruanganUnik.map(r => `<option value="${escapeHtml(r)}"></option>`).join('');
+        }
+
+        function handleBeritaAcaraRuangInput() {
+            const ruangVal = document.getElementById('ba-ruang-ujian').value.trim();
+            if (ruangVal) {
+                sessionMeta.ruang = ruangVal;
+                const sesiRuangInput = document.getElementById('sesi-ruang');
+                if (sesiRuangInput) sesiRuangInput.value = ruangVal;
+            }
+
+            const ruangFilter = ruangVal.toLowerCase();
+            const hadirCount = attendanceLogs.filter(a =>
+                a.mapel.toLowerCase() === sessionMeta.mapel.toLowerCase() &&
+                a.tanggal === sessionMeta.tanggal &&
+                (!ruangFilter || ruangFilter === 'semua ruang' || (a.ruang || '').trim().toLowerCase() === ruangFilter)
+            ).length;
+
+            const matchedMasterCount = (ruangFilter && ruangFilter !== 'semua ruang')
+                ? masterStudents.filter(s => (s.ruang || '').trim().toLowerCase() === ruangFilter).length
+                : masterStudents.length;
+
+            const totalSeharusnya = matchedMasterCount > 0 ? Math.max(matchedMasterCount, hadirCount) : hadirCount;
+            document.getElementById('ba-total-seharusnya').value = totalSeharusnya;
+            document.getElementById('ba-total-hadir').value = hadirCount;
+            document.getElementById('ba-total-tidak-hadir').value = Math.max(0, totalSeharusnya - hadirCount);
+
+            if (!beritaAcaraMeta.customNoTidakHadir) {
+                document.getElementById('ba-no-tidak-hadir').value = getAbsentStudentNumbersText();
+            }
+
+            saveBeritaAcaraMeta();
+        }
+
+        function formatTanggalIndonesia(isoDateStr) {
+            if (!isoDateStr) return { hari: '-', tanggalLengkap: '-' };
+            const parts = isoDateStr.split('-');
+            if (parts.length !== 3) return { hari: '-', tanggalLengkap: isoDateStr };
+            const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            const hariList = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+            const bulanList = [
+                'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+            ];
+            return {
+                hari: hariList[d.getDay()] || '-',
+                tanggalLengkap: `${d.getDate()} ${bulanList[d.getMonth()]} ${d.getFullYear()}`
+            };
+        }
+
+        function getAbsentStudentNumbersText() {
+            if (!masterStudents || masterStudents.length === 0) return 'Nihil';
+            const ruangFilter = (sessionMeta.ruang || '').trim().toLowerCase();
+            const targetMaster = (ruangFilter && ruangFilter !== 'semua ruang')
+                ? masterStudents.filter(s => (s.ruang || '').trim().toLowerCase() === ruangFilter)
+                : masterStudents;
+
+            if (targetMaster.length === 0) return 'Nihil';
+
+            const presentNos = new Set(
+                attendanceLogs
+                    .filter(a => a.mapel.toLowerCase() === sessionMeta.mapel.toLowerCase() && a.tanggal === sessionMeta.tanggal)
+                    .map(a => String(a.no || '').trim().toUpperCase())
+            );
+
+            const absentList = targetMaster.filter(s => !presentNos.has(String(s.no || '').trim().toUpperCase()));
+            if (absentList.length === 0) return 'Nihil';
+            return absentList.map(s => `${s.no} (${s.nama})`).join(', ');
+        }
+
+        function openBeritaAcaraModal() {
+            const modal = document.getElementById('berita-acara-modal');
+            populateBeritaAcaraRuangSuggestions();
+
+            const defaultRuang = (sessionMeta.ruang && sessionMeta.ruang.toLowerCase() !== 'semua ruang')
+                ? sessionMeta.ruang
+                : 'Ruang 01';
+            document.getElementById('ba-ruang-ujian').value = defaultRuang;
+            sessionMeta.ruang = defaultRuang;
+            const sesiRuangInput = document.getElementById('sesi-ruang');
+            if (sesiRuangInput) sesiRuangInput.value = defaultRuang;
+
+            const ruangFilter = defaultRuang.trim().toLowerCase();
+            const hadirCount = attendanceLogs.filter(a =>
+                a.mapel.toLowerCase() === sessionMeta.mapel.toLowerCase() &&
+                a.tanggal === sessionMeta.tanggal &&
+                (!ruangFilter || ruangFilter === 'semua ruang' || (a.ruang || '').trim().toLowerCase() === ruangFilter)
+            ).length;
+
+            const matchedMasterCount = (ruangFilter && ruangFilter !== 'semua ruang')
+                ? masterStudents.filter(s => (s.ruang || '').trim().toLowerCase() === ruangFilter).length
+                : masterStudents.length;
+
+            const totalSeharusnya = matchedMasterCount > 0 ? Math.max(matchedMasterCount, hadirCount) : hadirCount;
+
+            document.getElementById('ba-tahun-ajaran').value = beritaAcaraMeta.tahunAjaran || '2026/2027';
+            document.getElementById('ba-semester').value = beritaAcaraMeta.semester || 'Ganjil';
+            document.getElementById('ba-moda-ujian').value = beritaAcaraMeta.modaUjian || 'Berbasis HP Android (Daring / CBT)';
+            document.getElementById('ba-aplikasi-ujian').value = beritaAcaraMeta.aplikasiUjian || 'ExamBrowser / Google Form / CBT Sekolah';
+            document.getElementById('ba-status-jaringan').value = beritaAcaraMeta.statusJaringan || 'Lancar dan stabil selama ujian berlangsung';
+            document.getElementById('ba-total-seharusnya').value = totalSeharusnya;
+            document.getElementById('ba-total-hadir').value = hadirCount;
+            document.getElementById('ba-total-tidak-hadir').value = Math.max(0, totalSeharusnya - hadirCount);
+
+            const autoAbsent = getAbsentStudentNumbersText();
+            document.getElementById('ba-no-tidak-hadir').value = beritaAcaraMeta.customNoTidakHadir || autoAbsent;
+            document.getElementById('ba-pengawas-1').value = sessionMeta.pengawas || 'Panitia Ujian';
+            document.getElementById('ba-nip-1').value = sessionMeta.nip || '';
+            document.getElementById('ba-pengawas-2').value = beritaAcaraMeta.pengawas2 || '';
+            document.getElementById('ba-nip-2').value = beritaAcaraMeta.nip2 || '';
+            document.getElementById('ba-catatan').value = beritaAcaraMeta.catatan || 'Seluruh peserta berhasil login ke aplikasi ujian menggunakan HP Android masing-masing, mengirim jawaban (submit) tepat waktu, dan pelaksanaan ujian berjalan tertib serta aman.';
+
+            syncBeritaAcaraDocument();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeBeritaAcaraModal() {
+            const modal = document.getElementById('berita-acara-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function recalcBeritaAcaraCounts() {
+            const seharusnya = Math.max(0, parseInt(document.getElementById('ba-total-seharusnya').value || '0', 10));
+            const hadir = Math.max(0, parseInt(document.getElementById('ba-total-hadir').value || '0', 10));
+            document.getElementById('ba-total-tidak-hadir').value = Math.max(0, seharusnya - hadir);
+            saveBeritaAcaraMeta();
+        }
+
+        function saveBeritaAcaraMeta() {
+            const ruangInput = document.getElementById('ba-ruang-ujian')?.value.trim();
+            if (ruangInput) {
+                sessionMeta.ruang = ruangInput;
+                const sesiRuangEl = document.getElementById('sesi-ruang');
+                if (sesiRuangEl) sesiRuangEl.value = ruangInput;
+            }
+
+            beritaAcaraMeta.tahunAjaran = document.getElementById('ba-tahun-ajaran').value.trim() || '2026/2027';
+            beritaAcaraMeta.semester = document.getElementById('ba-semester').value || 'Ganjil';
+            beritaAcaraMeta.modaUjian = document.getElementById('ba-moda-ujian').value || 'Berbasis HP Android (Daring / CBT)';
+            beritaAcaraMeta.aplikasiUjian = document.getElementById('ba-aplikasi-ujian').value.trim() || 'ExamBrowser / CBT Sekolah';
+            beritaAcaraMeta.statusJaringan = document.getElementById('ba-status-jaringan').value || 'Lancar dan stabil selama ujian berlangsung';
+            beritaAcaraMeta.pengawas2 = document.getElementById('ba-pengawas-2').value.trim();
+            beritaAcaraMeta.nip2 = document.getElementById('ba-nip-2').value.trim();
+            beritaAcaraMeta.catatan = document.getElementById('ba-catatan').value.trim() || 'Seluruh peserta berhasil login ke aplikasi ujian menggunakan HP Android masing-masing, mengirim jawaban (submit) tepat waktu, dan pelaksanaan ujian berjalan tertib serta aman.';
+            beritaAcaraMeta.customNoTidakHadir = document.getElementById('ba-no-tidak-hadir').value.trim();
+
+            const p1 = document.getElementById('ba-pengawas-1').value.trim();
+            const n1 = document.getElementById('ba-nip-1').value.trim();
+            if (p1) {
+                sessionMeta.pengawas = p1;
+                document.getElementById('sesi-pengawas').value = p1;
+            }
+            sessionMeta.nip = n1;
+            document.getElementById('sesi-nip').value = n1;
+
+            try {
+                localStorage.setItem(BERITA_ACARA_KEY, JSON.stringify(beritaAcaraMeta));
+                localStorage.setItem(SESSION_META_KEY, JSON.stringify(sessionMeta));
+            } catch (e) {}
+
+            syncPrintHeaderMeta();
+        }
+
+        function syncBeritaAcaraDocument() {
+            const tglInfo = formatTanggalIndonesia(sessionMeta.tanggal);
+            const baModal = document.getElementById('berita-acara-modal');
+            const isModalOpen = baModal && !baModal.classList.contains('hidden');
+
+            const ruangAktif = isModalOpen
+                ? (document.getElementById('ba-ruang-ujian')?.value.trim() || sessionMeta.ruang || 'Ruang 01')
+                : ((sessionMeta.ruang && sessionMeta.ruang.toLowerCase() !== 'semua ruang') ? sessionMeta.ruang : 'Ruang 01');
+
+            const hadirCount = isModalOpen
+                ? parseInt(document.getElementById('ba-total-hadir').value || '0', 10)
+                : attendanceLogs.length;
+            const totalSeharusnya = isModalOpen
+                ? parseInt(document.getElementById('ba-total-seharusnya').value || '0', 10)
+                : (masterStudents.length > 0 ? Math.max(masterStudents.length, hadirCount) : hadirCount);
+            const tidakHadirCount = Math.max(0, totalSeharusnya - hadirCount);
+
+            const noTidakHadir = isModalOpen
+                ? (document.getElementById('ba-no-tidak-hadir').value.trim() || 'Nihil')
+                : (beritaAcaraMeta.customNoTidakHadir || getAbsentStudentNumbersText());
+
+            document.getElementById('ba-doc-semester').textContent = (beritaAcaraMeta.semester || 'GANJIL').toUpperCase();
+            document.getElementById('ba-doc-semester-inline').textContent = beritaAcaraMeta.semester || 'Ganjil';
+            document.getElementById('ba-doc-tahun').textContent = beritaAcaraMeta.tahunAjaran || '2026/2027';
+            document.getElementById('ba-doc-tahun-inline').textContent = beritaAcaraMeta.tahunAjaran || '2026/2027';
+            document.getElementById('ba-doc-moda-inline').textContent = beritaAcaraMeta.modaUjian || 'Berbasis HP Android (Daring / CBT)';
+            document.getElementById('ba-doc-hari').textContent = tglInfo.hari;
+            document.getElementById('ba-doc-tgl-lengkap').textContent = tglInfo.tanggalLengkap;
+            document.getElementById('ba-doc-mapel').textContent = sessionMeta.mapel || '-';
+            document.getElementById('ba-doc-sesi').textContent = cleanWaktuPelaksanaan(sessionMeta.jam);
+            document.getElementById('ba-doc-ruang').textContent = ruangAktif;
+            document.getElementById('ba-doc-aplikasi').textContent = `${beritaAcaraMeta.modaUjian} — ${beritaAcaraMeta.aplikasiUjian}`;
+            document.getElementById('ba-doc-jaringan').textContent = beritaAcaraMeta.statusJaringan;
+            document.getElementById('ba-doc-seharusnya').textContent = totalSeharusnya;
+            document.getElementById('ba-doc-hadir').textContent = hadirCount;
+            document.getElementById('ba-doc-tidak-hadir').textContent = tidakHadirCount;
+            document.getElementById('ba-doc-no-absen').textContent = noTidakHadir;
+            document.getElementById('ba-doc-catatan').textContent = beritaAcaraMeta.catatan || '-';
+
+            document.getElementById('ba-doc-sign-tgl').textContent = tglInfo.tanggalLengkap;
+            document.getElementById('ba-doc-sign-nama-1').textContent = sessionMeta.pengawas || 'Panitia Ujian';
+            document.getElementById('ba-doc-sign-nip-1').textContent = sessionMeta.nip ? `NIP. ${sessionMeta.nip}` : '';
+
+            const box2 = document.getElementById('ba-doc-sign-box-2');
+            if (beritaAcaraMeta.pengawas2) {
+                box2.classList.remove('invisible');
+                document.getElementById('ba-doc-sign-nama-2').textContent = beritaAcaraMeta.pengawas2;
+                document.getElementById('ba-doc-sign-nip-2').textContent = beritaAcaraMeta.nip2 ? `NIP. ${beritaAcaraMeta.nip2}` : '';
+            } else {
+                box2.classList.add('invisible');
+            }
+
+            // Sinkronkan juga ke Live Pratinjau di dalam Modal
+            const printDoc = document.getElementById('print-berita-acara-section');
+            const previewBox = document.getElementById('ba-live-preview-box');
+            if (printDoc && previewBox) {
+                previewBox.innerHTML = printDoc.innerHTML;
+            }
+        }
+
+        function printDaftarHadirOnly() {
+            const baSection = document.getElementById('print-berita-acara-section');
+            const dhHeader = document.getElementById('print-daftar-hadir-header');
+            const attSection = document.getElementById('attendance-list-section');
+
+            baSection.classList.add('hidden');
+            baSection.classList.remove('print:block');
+            dhHeader.classList.remove('print-page-break');
+            attSection.classList.remove('no-print');
+            window.print();
+        }
+
+        function printBeritaAcaraOnly() {
+            saveBeritaAcaraMeta();
+            syncBeritaAcaraDocument();
+            closeBeritaAcaraModal();
+
+            const baSection = document.getElementById('print-berita-acara-section');
+            const dhHeader = document.getElementById('print-daftar-hadir-header');
+            const attSection = document.getElementById('attendance-list-section');
+
+            baSection.classList.add('print:block');
+            dhHeader.classList.remove('print-only');
+            attSection.classList.add('no-print');
+
+            window.print();
+
+            // Kembalikan state tampilan daftar hadir setelah print
+            setTimeout(() => {
+                baSection.classList.remove('print:block');
+                dhHeader.classList.add('print-only');
+                attSection.classList.remove('no-print');
+            }, 500);
+        }
+
+        function printBeritaAcaraDanDaftarHadir() {
+            saveBeritaAcaraMeta();
+            syncBeritaAcaraDocument();
+            closeBeritaAcaraModal();
+
+            const baSection = document.getElementById('print-berita-acara-section');
+            const dhHeader = document.getElementById('print-daftar-hadir-header');
+            const attSection = document.getElementById('attendance-list-section');
+
+            baSection.classList.add('print:block');
+            dhHeader.classList.add('print-only', 'print-page-break');
+            attSection.classList.remove('no-print');
+
+            window.print();
+
+            setTimeout(() => {
+                baSection.classList.remove('print:block');
+                dhHeader.classList.remove('print-page-break');
+            }, 500);
+        }
+
+        /* =========================================================
+           KONTROL KAMERA PEMINDAI QR CODE (ANDROID WEBVIEW & BROWSER)
+           ========================================================= */
+        async function startCameraScanner(preferredDeviceId = null) {
+            if (isScanning) {
+                await stopCameraScanner();
+            }
+
+            const placeholder = document.getElementById('camera-placeholder');
+            const guideOverlay = document.getElementById('scan-guide-overlay');
+            const btnStart = document.getElementById('btn-start-cam');
+            const btnStop = document.getElementById('btn-stop-cam');
+            const nativeVideo = document.getElementById('native-qr-video');
+            const qrReaderDiv = document.getElementById('qr-reader');
+
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Browser/WebView tidak mendukung akses kamera langsung.');
+                }
+
+                const videoConstraints = preferredDeviceId
+                    ? { deviceId: { exact: preferredDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+
+                nativeMediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: videoConstraints,
+                    audio: false
+                });
+
+                // Perbarui dropdown pilihan kamera setelah izin diberikan
+                await populateCameraDevices(preferredDeviceId);
+
+                qrReaderDiv.classList.add('hidden');
+                nativeVideo.srcObject = nativeMediaStream;
+                nativeVideo.setAttribute('playsinline', 'true');
+                nativeVideo.muted = true;
+                await nativeVideo.play();
+
+                nativeVideo.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+                guideOverlay.classList.remove('hidden');
+                btnStart.classList.add('hidden');
+                btnStop.classList.remove('hidden');
+                isScanning = true;
+
+                startNativeFrameScanner(nativeVideo);
+                showToast('Kamera aktif. Arahkan QR Code kartu ujian ke kotak pemindai.', 'success');
+            } catch (err) {
+                console.warn('Native getUserMedia gagal, mencoba fallback Html5Qrcode:', err);
+                try {
+                    if (typeof Html5Qrcode !== 'undefined') {
+                        nativeVideo.classList.add('hidden');
+                        qrReaderDiv.classList.remove('hidden');
+                        placeholder.classList.add('hidden');
+                        guideOverlay.classList.remove('hidden');
+                        btnStart.classList.add('hidden');
+                        btnStop.classList.remove('hidden');
+
+                        html5QrCode = new Html5Qrcode('qr-reader');
+                        const configCam = { fps: 10, qrbox: { width: 200, height: 200 } };
+                        const camTarget = preferredDeviceId || { facingMode: 'environment' };
+                        await html5QrCode.start(camTarget, configCam, (decodedText) => {
+                            onQrDecodedSuccess(decodedText);
+                        });
+                        isScanning = true;
+                        showToast('Kamera pemindai aktif.', 'success');
+                        return;
+                    }
+                } catch (fallbackErr) {
+                    console.error('Fallback kamera juga gagal:', fallbackErr);
+                }
+
+                isScanning = false;
+                placeholder.classList.remove('hidden');
+                guideOverlay.classList.add('hidden');
+                btnStart.classList.remove('hidden');
+                btnStop.classList.add('hidden');
+                showToast('Kamera tidak dapat dibuka. Pastikan izin kamera aktif atau gunakan tombol 📸 Foto QR Kartu.', 'error');
+            }
+        }
+
+        async function populateCameraDevices(activeId = null) {
+            try {
+                if (!navigator.mediaDevices?.enumerateDevices) return;
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                availableCameras = devices.filter(d => d.kind === 'videoinput');
+                const wrapper = document.getElementById('camera-select-wrapper');
+                const select = document.getElementById('camera-device-select');
+
+                if (availableCameras.length > 1 && wrapper && select) {
+                    select.innerHTML = availableCameras.map((cam, idx) => {
+                        const label = cam.label || `Kamera ${idx + 1}`;
+                        const selected = (activeId && cam.deviceId === activeId) ? 'selected' : '';
+                        return `<option value="${escapeHtml(cam.deviceId)}" ${selected}>${escapeHtml(label)}</option>`;
+                    }).join('');
+                    wrapper.classList.remove('hidden');
+                }
+            } catch (e) {}
+        }
+
+        function switchCameraDevice() {
+            const select = document.getElementById('camera-device-select');
+            if (select && select.value) {
+                startCameraScanner(select.value);
+            }
+        }
+
+        function startNativeFrameScanner(videoEl) {
+            const canvas = document.getElementById('native-qr-canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            let barcodeDetector = null;
+
+            if ('BarcodeDetector' in window) {
+                try {
+                    barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+                } catch (e) {
+                    barcodeDetector = null;
+                }
+            }
+
+            const scanTick = async () => {
+                if (!isScanning) return;
+
+                if (videoEl.readyState >= videoEl.HAVE_ENOUGH_DATA && videoEl.videoWidth > 0) {
+                    try {
+                        if (barcodeDetector) {
+                            const codes = await barcodeDetector.detect(videoEl);
+                            if (codes && codes.length > 0 && codes[0].rawValue) {
+                                onQrDecodedSuccess(codes[0].rawValue);
+                            }
+                        } else if (typeof jsQR !== 'undefined') {
+                            canvas.width = videoEl.videoWidth;
+                            canvas.height = videoEl.videoHeight;
+                            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const qr = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+                            if (qr && qr.data) {
+                                onQrDecodedSuccess(qr.data);
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                nativeScanLoopId = requestAnimationFrame(scanTick);
+            };
+
+            nativeScanLoopId = requestAnimationFrame(scanTick);
+        }
+
+        async function stopCameraScanner() {
+            isScanning = false;
+            if (nativeScanLoopId) {
+                cancelAnimationFrame(nativeScanLoopId);
+                nativeScanLoopId = null;
+            }
+            if (nativeMediaStream) {
+                nativeMediaStream.getTracks().forEach(track => track.stop());
+                nativeMediaStream = null;
+            }
+            if (html5QrCode) {
+                try {
+                    await html5QrCode.stop();
+                    html5QrCode.clear();
+                } catch (e) {}
+                html5QrCode = null;
+            }
+
+            const nativeVideo = document.getElementById('native-qr-video');
+            const qrReaderDiv = document.getElementById('qr-reader');
+            const placeholder = document.getElementById('camera-placeholder');
+            const guideOverlay = document.getElementById('scan-guide-overlay');
+            const btnStart = document.getElementById('btn-start-cam');
+            const btnStop = document.getElementById('btn-stop-cam');
+
+            if (nativeVideo) {
+                nativeVideo.srcObject = null;
+                nativeVideo.classList.add('hidden');
+            }
+            if (qrReaderDiv) qrReaderDiv.classList.add('hidden');
+            if (placeholder) placeholder.classList.remove('hidden');
+            if (guideOverlay) guideOverlay.classList.add('hidden');
+            if (btnStart) btnStart.classList.remove('hidden');
+            if (btnStop) btnStop.classList.add('hidden');
+        }
+
+        /* =========================================================
+           CADANGAN FOTO QR LANGSUNG (ANDROID CAMERA CAPTURE)
+           ========================================================= */
+        function handleAndroidPhotoQr(event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = async () => {
+                    try {
+                        if ('BarcodeDetector' in window) {
+                            const detector = new BarcodeDetector({ formats: ['qr_code'] });
+                            const codes = await detector.detect(img);
+                            if (codes && codes.length > 0 && codes[0].rawValue) {
+                                onQrDecodedSuccess(codes[0].rawValue);
+                                return;
+                            }
+                        }
+
+                        if (typeof jsQR !== 'undefined') {
+                            const canvas = document.createElement('canvas');
+                            const maxDim = 1200;
+                            let w = img.width;
+                            let h = img.height;
+                            if (w > maxDim || h > maxDim) {
+                                const scale = Math.min(maxDim / w, maxDim / h);
+                                w = Math.round(w * scale);
+                                h = Math.round(h * scale);
+                            }
+                            canvas.width = w;
+                            canvas.height = h;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, w, h);
+                            const imageData = ctx.getImageData(0, 0, w, h);
+                            const qr = jsQR(imageData.data, w, h);
+                            if (qr && qr.data) {
+                                onQrDecodedSuccess(qr.data);
+                                return;
+                            }
+                        }
+
+                        showToast('QR Code tidak terbaca pada foto. Pastikan QR terlihat jelas dan tidak buram.', 'warning');
+                    } catch (err) {
+                        showToast('Gagal memproses foto QR Code.', 'error');
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        /* =========================================================
+           PEMROSESAN DATA QR CODE & PENCATATAN KEHADIRAN
+           ========================================================= */
+        function handleManualScanSubmit(event) {
+            event.preventDefault();
+            const inp = document.getElementById('manual-qr-input');
+            const val = inp.value.trim();
+            if (!val) return;
+            processScannedPayload(val, true);
+            inp.value = '';
+            inp.focus();
+        }
+
+        function onQrDecodedSuccess(rawText) {
+            const now = Date.now();
+            if (rawText === lastScannedRaw && (now - lastScannedTimestamp) < 2800) {
+                return;
+            }
+            lastScannedRaw = rawText;
+            lastScannedTimestamp = now;
+            processScannedPayload(rawText, false);
+        }
+
+        function parseQrStudentData(rawText) {
+            const clean = String(rawText || '').trim();
+            const parts = clean.split('|').map(p => p.trim());
+
+            let parsedNo = '';
+            let parsedNisn = '';
+            let parsedNama = '';
+            let parsedKelas = '';
+            let parsedRuang = '';
+
+            if (parts.length >= 5) {
+                [parsedNo, parsedNisn, parsedNama, parsedKelas, parsedRuang] = parts;
+            } else if (parts.length === 3) {
+                [parsedNo, parsedNisn, parsedKelas] = parts;
+            } else {
+                parsedNo = clean;
+                parsedNisn = clean;
+            }
+
+            // Cari kecocokan dengan Database Master Siswa
+            const matchedMaster = masterStudents.find(s =>
+                (parsedNo && String(s.no).trim().toUpperCase() === parsedNo.toUpperCase()) ||
+                (parsedNisn && String(s.nisn).trim() === parsedNisn) ||
+                (clean && String(s.no).trim().toUpperCase() === clean.toUpperCase()) ||
+                (clean && String(s.nisn).trim() === clean)
+            );
+
+            if (matchedMaster) {
+                return {
+                    no: matchedMaster.no,
+                    nisn: matchedMaster.nisn,
+                    nama: matchedMaster.nama,
+                    kelas: matchedMaster.kelas,
+                    ruang: matchedMaster.ruang
+                };
+            }
+
+            return {
+                no: parsedNo || '-',
+                nisn: parsedNisn || '-',
+                nama: parsedNama || `PESERTA (${parsedNo || clean})`,
+                kelas: parsedKelas || '-',
+                ruang: parsedRuang || (sessionMeta.ruang !== 'Semua Ruang' ? sessionMeta.ruang : 'Ruang 01')
+            };
+        }
+
+        function processScannedPayload(rawText, isManual) {
+            const student = parseQrStudentData(rawText);
+            const currentMapel = sessionMeta.mapel || 'Bahasa Indonesia';
+            const currentTanggal = sessionMeta.tanggal || new Date().toISOString().split('T')[0];
+
+            // Cek duplikasi pada mata pelajaran & tanggal yang sama
+            const existingIndex = attendanceLogs.findIndex(item =>
+                item.mapel.toLowerCase() === currentMapel.toLowerCase() &&
+                item.tanggal === currentTanggal &&
+                ((student.no !== '-' && item.no.toUpperCase() === student.no.toUpperCase()) ||
+                 (student.nisn !== '-' && item.nisn === student.nisn))
+            );
+
+            if (existingIndex !== -1) {
+                playBeepSound('duplicate');
+                const existing = attendanceLogs[existingIndex];
+                updateLastScanCard(existing, 'DUPLICATE');
+                showToast(`${existing.nama} sudah tercatat hadir pada ${existing.waktu}.`, 'warning');
+                return;
+            }
+
+            const now = new Date();
+            const waktuStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+
+            const record = {
+                id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                no: student.no,
+                nisn: student.nisn,
+                nama: student.nama,
+                kelas: student.kelas,
+                ruang: student.ruang,
+                mapel: currentMapel,
+                tanggal: currentTanggal,
+                sesi: sessionMeta.jam,
+                pengawas: sessionMeta.pengawas,
+                waktu: waktuStr,
+                metode: isManual ? 'Manual/USB' : 'Scan QR'
+            };
+
+            attendanceLogs.unshift(record);
+            saveAttendanceLogs();
+            playBeepSound('success');
+            updateLastScanCard(record, 'SUCCESS');
+            updateFilterOptions();
+            renderAttendanceTable();
+            updateStats();
+            syncBeritaAcaraDocument();
+            showToast(`HADIR: ${record.nama} (${record.no})`, 'success');
+        }
+
+        function updateLastScanCard(record, status) {
+            const container = document.getElementById('last-scan-content');
+            const card = document.getElementById('last-scan-card');
+            if (!container || !card) return;
+
+            card.classList.remove('scan-success-flash');
+            void card.offsetWidth;
+            card.classList.add('scan-success-flash');
+
+            const isDup = status === 'DUPLICATE';
+            const badgeClass = isDup ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300';
+            const badgeText = isDup ? 'SUDAH ABSEN SEBELUMNYA' : 'TERDETEKSI HADIR';
+
+            container.innerHTML = `
+                <div class="w-12 h-12 rounded-2xl ${isDup ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center shrink-0 font-black text-base shadow-xs">
+                    ✓
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${badgeClass}">${badgeText}</span>
+                        <span class="text-[11px] font-bold text-slate-500">${escapeHtml(record.waktu)}</span>
+                    </div>
+                    <div class="text-sm font-black text-slate-900 truncate">${escapeHtml(record.nama)}</div>
+                    <div class="text-xs font-semibold text-slate-600 truncate">
+                        No: ${escapeHtml(record.no)} • NISN: ${escapeHtml(record.nisn)} • ${escapeHtml(record.kelas)} (${escapeHtml(record.ruang)})
+                    </div>
+                </div>
+            `;
+        }
+
+        /* =========================================================
+           TABEL DAFTAR HADIR, FILTER & STATISTIK
+           ========================================================= */
+        function updateFilterOptions() {
+            const kelasSel = document.getElementById('filter-kelas');
+            const ruangSel = document.getElementById('filter-ruang');
+            if (!kelasSel || !ruangSel) return;
+
+            const prevKelas = kelasSel.value;
+            const prevRuang = ruangSel.value;
+
+            const allKelas = [...new Set([
+                ...masterStudents.map(s => s.kelas),
+                ...attendanceLogs.map(a => a.kelas)
+            ].filter(Boolean))].sort();
+
+            const allRuang = [...new Set([
+                ...masterStudents.map(s => s.ruang),
+                ...attendanceLogs.map(a => a.ruang)
+            ].filter(Boolean))].sort();
+
+            kelasSel.innerHTML = `<option value="ALL">Semua Kelas (${allKelas.length})</option>` +
+                allKelas.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join('');
+
+            ruangSel.innerHTML = `<option value="ALL">Semua Ruang (${allRuang.length})</option>` +
+                allRuang.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+
+            if (allKelas.includes(prevKelas)) kelasSel.value = prevKelas;
+            if (allRuang.includes(prevRuang)) ruangSel.value = prevRuang;
+        }
+
+        function getFilteredLogs() {
+            const q = (document.getElementById('filter-search')?.value || '').trim().toLowerCase();
+            const kelas = document.getElementById('filter-kelas')?.value || 'ALL';
+            const ruang = document.getElementById('filter-ruang')?.value || 'ALL';
+
+            return attendanceLogs.filter(item => {
+                const matchQ = !q ||
+                    item.nama.toLowerCase().includes(q) ||
+                    item.no.toLowerCase().includes(q) ||
+                    item.nisn.toLowerCase().includes(q) ||
+                    item.mapel.toLowerCase().includes(q);
+                const matchK = kelas === 'ALL' || item.kelas === kelas;
+                const matchR = ruang === 'ALL' || item.ruang === ruang;
+                return matchQ && matchK && matchR;
+            });
+        }
+
+        function renderAttendanceTable() {
+            const tbody = document.getElementById('attendance-tbody');
+            if (!tbody) return;
+
+            const rows = getFilteredLogs();
+            if (rows.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="p-8 text-center text-xs text-slate-400">
+                            Belum ada peserta yang tercatat hadir pada tampilan filter saat ini. Silakan pindai QR Code kartu ujian.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            tbody.innerHTML = rows.map((row, idx) => `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="p-3 text-center font-semibold text-slate-600">${idx + 1}</td>
+                    <td class="p-3 font-extrabold text-[#123466] whitespace-nowrap">${escapeHtml(row.no)}</td>
+                    <td class="p-3 font-medium text-slate-700 whitespace-nowrap">${escapeHtml(row.nisn)}</td>
+                    <td class="p-3 font-bold text-slate-900 uppercase">${escapeHtml(row.nama)}</td>
+                    <td class="p-3 font-semibold text-slate-700 whitespace-nowrap">${escapeHtml(row.kelas)}</td>
+                    <td class="p-3 font-semibold text-slate-700 whitespace-nowrap">${escapeHtml(row.ruang)}</td>
+                    <td class="p-3 font-medium text-slate-600 whitespace-nowrap">${escapeHtml(row.waktu)}</td>
+                    <td class="p-3 text-center whitespace-nowrap">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">HADIR</span>
+                    </td>
+                    <td class="p-3 text-center no-print">
+                        <button onclick="deleteAttendanceRecord('${escapeHtml(row.id)}')" title="Hapus catatan ini" class="text-rose-500 hover:text-rose-700 font-bold text-xs px-2 py-1 rounded hover:bg-rose-50 transition">
+                            Hapus
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateStats() {
+            const hadirCount = attendanceLogs.length;
+            const totalMaster = masterStudents.length > 0 ? Math.max(masterStudents.length, hadirCount) : hadirCount;
+            const belumCount = Math.max(0, totalMaster - hadirCount);
+            const persen = totalMaster > 0 ? Math.round((hadirCount / totalMaster) * 100) : 0;
+
+            document.getElementById('stat-hadir').textContent = hadirCount;
+            document.getElementById('stat-total').textContent = totalMaster;
+            document.getElementById('stat-belum').textContent = belumCount;
+            document.getElementById('stat-persen').textContent = `${persen}%`;
+
+            const pHadir = document.getElementById('print-count-hadir');
+            const pTidak = document.getElementById('print-count-tidak');
+            if (pHadir) pHadir.textContent = hadirCount;
+            if (pTidak) pTidak.textContent = belumCount;
+        }
+
+        function deleteAttendanceRecord(id) {
+            attendanceLogs = attendanceLogs.filter(item => item.id !== id);
+            saveAttendanceLogs();
+            renderAttendanceTable();
+            updateStats();
+            syncBeritaAcaraDocument();
+            showToast('Catatan kehadiran dihapus.', 'info');
+        }
+
+        function confirmResetAttendance() {
+            if (attendanceLogs.length === 0) {
+                showToast('Daftar kehadiran sudah kosong.', 'info');
+                return;
+            }
+            openConfirmDialog(
+                'Reset Daftar Kehadiran',
+                `Hapus seluruh ${attendanceLogs.length} catatan kehadiran pada sesi ini untuk memulai sesi mata pelajaran berikutnya?`,
+                () => {
+                    attendanceLogs = [];
+                    saveAttendanceLogs();
+                    renderAttendanceTable();
+                    updateStats();
+                    syncBeritaAcaraDocument();
+                    showToast('Daftar kehadiran berhasil direset.', 'warning');
+                }
+            );
+        }
+
+        /* =========================================================
+           IMPOR DATABASE MASTER SISWA & EKSPOR REKAP EXCEL (.XLSX)
+           ========================================================= */
+        function importMasterStudents(event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+
+            if (typeof XLSX === 'undefined') {
+                showToast('Library Excel belum termuat.', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const wb = XLSX.read(data, { type: 'array' });
+                    const sheet = wb.Sheets[wb.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+                    const loaded = [];
+                    rows.forEach((row, idx) => {
+                        const norm = {};
+                        Object.keys(row).forEach(k => {
+                            norm[k.trim().toLowerCase().replace(/\s+/g, '_')] = String(row[k]).trim();
+                        });
+                        const nama = norm.nama_siswa || norm.nama || norm.nama_lengkap || '';
+                        if (!nama) return;
+                        loaded.push({
+                            no: (norm.no_peserta || norm.nomor_peserta || `US-26-${String(idx + 1).padStart(3, '0')}`).toUpperCase(),
+                            nisn: norm.nisn || '-',
+                            nama: nama.toUpperCase(),
+                            kelas: (norm.kelas || '-').toUpperCase(),
+                            ruang: norm.ruang || 'Ruang 01'
+                        });
+                    });
+
+                    if (loaded.length === 0) {
+                        showToast('Tidak ada data siswa yang valid ditemukan di file Excel.', 'warning');
+                        return;
+                    }
+
+                    masterStudents = loaded;
+                    localStorage.setItem(MASTER_STUDENTS_KEY, JSON.stringify(masterStudents));
+                    document.getElementById('master-count').textContent = masterStudents.length;
+                    updateFilterOptions();
+                    updateStats();
+                    syncBeritaAcaraDocument();
+                    showToast(`Berhasil memuat ${masterStudents.length} data master siswa.`, 'success');
+                } catch (err) {
+                    showToast('Gagal membaca file Excel siswa.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+
+        function exportAttendanceExcel() {
+            const rows = getFilteredLogs();
+            if (rows.length === 0) {
+                showToast('Belum ada data kehadiran untuk diekspor ke Excel.', 'warning');
+                return;
+            }
+            if (typeof XLSX === 'undefined') {
+                showToast('Library Excel belum termuat.', 'error');
+                return;
+            }
+
+            const exportData = rows.map((r, i) => ({
+                No: i + 1,
+                No_Peserta: r.no,
+                NISN: r.nisn,
+                Nama_Siswa: r.nama,
+                Kelas: r.kelas,
+                Ruang: r.ruang,
+                Mata_Pelajaran: r.mapel,
+                Tanggal: r.tanggal,
+                Waktu_Pelaksanaan: r.sesi,
+                Waktu_Scan: r.waktu,
+                Status: 'HADIR',
+                Pengawas: r.pengawas,
+                NIP_Pengawas: sessionMeta.nip || '-'
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            ws['!cols'] = [
+                { wch: 5 }, { wch: 14 }, { wch: 15 }, { wch: 28 }, { wch: 10 },
+                { wch: 12 }, { wch: 28 }, { wch: 13 }, { wch: 20 }, { wch: 14 },
+                { wch: 10 }, { wch: 22 }, { wch: 20 }
+            ];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Rekap_Absensi_Ujian');
+
+            const safeMapel = (sessionMeta.mapel || 'Ujian').replace(/[^a-zA-Z0-9]/g, '_');
+            const filename = `Absensi_Ujian_${safeMapel}_${sessionMeta.tanggal || 'SMPN56'}.xlsx`;
+            XLSX.writeFile(wb, filename);
+            showToast(`File ${filename} berhasil diunduh!`, 'success');
+        }
+
+        /* =========================================================
+           EFEK SUARA BEEP (WEB AUDIO API - OFFLINE)
+           ========================================================= */
+        function playBeepSound(type = 'success') {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const ctx = new AudioCtx();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                if (type === 'duplicate') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(420, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.18);
+                } else {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, ctx.currentTime);
+                    osc.frequency.setValueAtTime(1180, ctx.currentTime + 0.08);
+                    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.18);
+                }
+            } catch (e) {}
+        }
+
+        /* =========================================================
+           TOAST & MODAL KONFIRMASI + ESCAPE HTML
+           ========================================================= */
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const colors = {
+                success: 'bg-emerald-600 text-white border-emerald-700',
+                warning: 'bg-amber-500 text-slate-950 border-amber-600',
+                error: 'bg-rose-600 text-white border-rose-700',
+                info: 'bg-slate-800 text-white border-slate-900'
+            };
+
+            const toast = document.createElement('div');
+            toast.className = `px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold transition-all duration-300 ${colors[type] || colors.info}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3400);
+        }
+
+        function openConfirmDialog(title, message, onConfirm) {
+            const modal = document.getElementById('confirm-modal');
+            const titleEl = document.getElementById('confirm-title');
+            const msgEl = document.getElementById('confirm-message');
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+            const okBtn = document.getElementById('confirm-ok-btn');
+
+            if (!modal) return;
+            titleEl.textContent = title;
+            msgEl.textContent = message;
+
+            const close = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            };
+
+            cancelBtn.onclick = close;
+            okBtn.onclick = () => {
+                close();
+                if (typeof onConfirm === 'function') onConfirm();
+            };
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+    </script>
+</body>
+</html>
